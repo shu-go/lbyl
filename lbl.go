@@ -60,7 +60,7 @@ Options:
 				if len(buf) != 0 && currts.Sub(prevts) > time.Duration(*throttle)*time.Millisecond {
 					err = launchCommand(*pipe, *async, buf, command, args...)
 					if err != nil {
-						fmt.Fprintln(os.Stderr, err)
+						fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 					}
 
 					prevts = currts
@@ -69,7 +69,7 @@ Options:
 			} else {
 				err = launchCommand(*pipe, *async, buf, command, args...)
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
+					fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 				}
 				buf = buf[:0]
 			}
@@ -78,7 +78,7 @@ Options:
 		if *throttle != 0 && len(buf) != 0 {
 			err := launchCommand(*pipe, *async, buf, command, args...)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 			}
 		}
 
@@ -110,7 +110,7 @@ func launchCommand(pipe, async bool, buf [][]byte, command string, args ...strin
 	if pipe {
 		sp, err := c.StdinPipe()
 		if err != nil {
-			return err
+			return fmt.Errorf("can't get StdinPipe(): %v", err)
 		}
 		for _, b := range buf {
 			sp.Write(b)
@@ -128,7 +128,11 @@ func launchCommand(pipe, async bool, buf [][]byte, command string, args ...strin
 		err = c.Run()
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("failed launching (command:%v, args:%#v): %v", command, args, err)
+	}
+
+	return nil
 }
 
 func replaceEach(old, new string, strs ...string) []string {
