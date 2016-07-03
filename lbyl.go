@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"golang.org/x/crypto/ssh/terminal"
 )
 
 func main() {
@@ -47,44 +45,40 @@ Options:
 		args = flag.Args()[1:]
 	}
 
-	if !terminal.IsTerminal(0) {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			var err error
-			line := scanner.Bytes()
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		var err error
+		line := scanner.Bytes()
 
-			buf = append(buf, line)
+		buf = append(buf, line)
 
-			if *throttle != 0 {
-				var currts time.Time = time.Now()
-				if len(buf) != 0 && currts.Sub(prevts) > time.Duration(*throttle)*time.Millisecond {
-					err = launchCommand(*pipe, *async, buf, command, args...)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
-					}
-
-					prevts = currts
-					buf = buf[:0]
-				}
-			} else {
+		if *throttle != 0 {
+			var currts time.Time = time.Now()
+			if len(buf) != 0 && currts.Sub(prevts) > time.Duration(*throttle)*time.Millisecond {
 				err = launchCommand(*pipe, *async, buf, command, args...)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 				}
+
+				prevts = currts
 				buf = buf[:0]
 			}
-		}
-
-		if *throttle != 0 && len(buf) != 0 {
-			err := launchCommand(*pipe, *async, buf, command, args...)
+		} else {
+			err = launchCommand(*pipe, *async, buf, command, args...)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 			}
+			buf = buf[:0]
 		}
-
-	} else { // terminal
-		os.Exit(-1)
 	}
+
+	if *throttle != 0 && len(buf) != 0 {
+		err := launchCommand(*pipe, *async, buf, command, args...)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
+		}
+	}
+
 }
 
 func launchCommand(pipe, async bool, buf [][]byte, command string, args ...string) error {
