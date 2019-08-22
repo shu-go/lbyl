@@ -2,35 +2,36 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/shu-go/gli"
 )
 
+type globalCmd struct {
+	Async    bool `help:"launch command2 asynchronously (default false)"`
+	Pipe     bool `help:"pipe to command2 (default false)"`
+	Throttle int  `help:"set interval (ms) between launchings of command2. Input is buffered (default 0 (no throttling))"`
+}
+
 func main() {
-	async := flag.Bool("async", false, "launch command2 asynchronously (default false)")
-	pipe := flag.Bool("pipe", false, "pipe to command2 (default false)")
-	throttle := flag.Int("throttle", 0, "set `interval (ms)` between launchings of command2. Input is buffered (default 0 (no throttling))")
+	app := gli.NewWith(&globalCmd{})
+	app.Name = "lbyl"
+	app.Desc = "Launch command with stdin (pipe) line by line."
+	app.Version = "0.0.0"
+	app.Usage = `
+command1 | lbyl [OPTIONS] command2 -opt1 -opt2 ?
+command1 | lbyl -pipe [OPTIONS] command2 -opt1 -opt2 
+`
+	app.Copyright = "(C) 2018 Shuhei Kubota"
 
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `
-Usage of %v:
-  command1 | %v [OPTIONS] command2 -opt1 -opt2 ?
-  command1 | %v -pipe [OPTIONS] command2 -opt1 -opt2
+	app.Run(os.Args)
+}
 
-Launch command with stdin (pipe) line by line.
-
-Options:
-`,
-			os.Args[0], os.Args[0], os.Args[0])
-		flag.PrintDefaults()
-	}
-
-	flag.Parse()
-
+func (c globalCmd) Run(args []string) error {
 	//fmt.Println("--------------------------------------------------")
 	//fmt.Printf("Args: %#v\n", os.Args)
 	//fmt.Println("--------------------------------------------------")
@@ -39,10 +40,9 @@ Options:
 	var prevts time.Time = time.Now()
 
 	var command string
-	var args []string
-	if flag.NArg() > 0 {
-		command = flag.Arg(0)
-		args = flag.Args()[1:]
+	if len(args) > 0 {
+		command = args[0]
+		args = args[1:]
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -52,10 +52,10 @@ Options:
 
 		buf = append(buf, line)
 
-		if *throttle != 0 {
+		if c.Throttle != 0 {
 			var currts time.Time = time.Now()
-			if len(buf) != 0 && currts.Sub(prevts) > time.Duration(*throttle)*time.Millisecond {
-				err = launchCommand(*pipe, *async, buf, command, args...)
+			if len(buf) != 0 && currts.Sub(prevts) > time.Duration(c.Throttle)*time.Millisecond {
+				err = launchCommand(c.Pipe, c.Async, buf, command, args...)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 				}
@@ -64,7 +64,7 @@ Options:
 				buf = buf[:0]
 			}
 		} else {
-			err = launchCommand(*pipe, *async, buf, command, args...)
+			err = launchCommand(c.Pipe, c.Async, buf, command, args...)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 			}
@@ -72,13 +72,14 @@ Options:
 		}
 	}
 
-	if *throttle != 0 && len(buf) != 0 {
-		err := launchCommand(*pipe, *async, buf, command, args...)
+	if c.Throttle != 0 && len(buf) != 0 {
+		err := launchCommand(c.Pipe, c.Async, buf, command, args...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error while launching: %v\n", err)
 		}
 	}
 
+	return nil
 }
 
 func launchCommand(pipe, async bool, buf [][]byte, command string, args ...string) error {
